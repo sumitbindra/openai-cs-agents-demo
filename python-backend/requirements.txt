@@ -2,3 +2,7 @@ openai-agents
 pydantic
 fastapi
 uvicorn
+openai
+pypdf
+python-quickbooks
+requests
