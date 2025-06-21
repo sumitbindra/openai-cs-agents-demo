@@ -100,24 +100,30 @@ async def parse_pdf_tool(
     description_override="Creates a journal entry in QuickBooks using the provided structured data."
 )
 async def create_quickbooks_journal_entry_tool(
-    context: RunContextWrapper[QuickbooksAgentContext], data: dict # Expects dict form of ReceiptData or InvoiceData
+    context: RunContextWrapper[QuickbooksAgentContext], data: ReceiptData | InvoiceData
 ) -> str:
     """
     Simulates creating a journal entry in QuickBooks.
     In a real scenario, this would involve API calls to the QuickBooks API.
     """
-    print(f"Simulating QuickBooks journal entry creation with data: {data}")
+    print(f"Simulating QuickBooks journal entry creation with data: {data.model_dump_json(indent=2)}")
 
-    # Based on the structure of data, determine if it's a receipt or invoice for simulation
-    if "merchant_name" in data: # Likely a ReceiptData
+    entry_type = "Unknown"
+    details = ""
+
+    if isinstance(data, ReceiptData):
         entry_type = "Receipt"
-        details = f"Merchant: {data.get('merchant_name')}, Amount: {data.get('total_amount')}"
-    elif "invoice_number" in data: # Likely an InvoiceData
+        details = f"Merchant: {data.merchant_name}, Amount: {data.total_amount}"
+    elif isinstance(data, InvoiceData):
         entry_type = "Invoice"
-        details = f"Invoice #: {data.get('invoice_number')}, Customer: {data.get('customer_name')}, Amount: {data.get('total_amount')}"
+        details = f"Invoice #: {data.invoice_number}, Customer: {data.customer_name}, Amount: {data.total_amount}"
     else:
+        # This case should ideally not be reached if type checking is correct upstream
+        # or if the Pydantic model validation for the union works as expected.
         entry_type = "Generic"
-        details = f"Amount: {data.get('total_amount')}"
+        # Try to get total_amount if available, otherwise it will be None.
+        total_amount = getattr(data, 'total_amount', None)
+        details = f"Amount: {total_amount}" if total_amount is not None else "No amount specified"
 
     # Simulate API call and get a transaction ID
     simulated_transaction_id = f"QB-JE-{random.randint(10000, 99999)}"
@@ -186,11 +192,13 @@ quickbooks_journal_agent = Agent[QuickbooksAgentContext](
     handoff_description="Creates journal entries in QuickBooks from structured data.",
     instructions=f"""{RECOMMENDED_PROMPT_PREFIX}
     You are a QuickBooks Journal Agent. You help users create journal entries in QuickBooks.
-    1. You typically receive structured data (like from a receipt or invoice) from another agent (e.g., PDF Processing Agent) or directly from the user if they provide it.
-    2. Confirm with the user that they want to create a journal entry with the provided data. The data should be in the context (`context.context.extracted_data`).
-    3. If confirmed, use the 'create_quickbooks_journal_entry_tool' to post the entry.
-    4. Inform the user of the success and the transaction ID.
-    If the user asks for something else, or if there's no data to process, consider handing off to the Triage Agent.
+    1. You typically receive structured data (like from a receipt or invoice) from another agent (e.g., PDF Processing Agent). This data should be present in `context.context.extracted_data`.
+    2. First, check if `context.context.extracted_data` actually contains data (i.e., it's not None).
+    3. If `context.context.extracted_data` is None or does not seem to contain valid receipt or invoice information, inform the user that there is no data available to create a journal entry and suggest they process a PDF first or handoff to the Triage Agent. Do not attempt to call the tool without valid data.
+    4. If data is available in `context.context.extracted_data`, confirm with the user that they want to create a journal entry using this specific data. You can summarize key fields from the data for confirmation.
+    5. If the user confirms, use the 'create_quickbooks_journal_entry_tool'. You MUST pass the entire `context.context.extracted_data` object (which will be either a ReceiptData or InvoiceData model instance) as the 'data' argument to this tool.
+    6. After the tool call, inform the user of the outcome (e.g., success and transaction ID, or any errors reported by the tool).
+    If the user asks for something unrelated to creating a journal entry from the current `extracted_data`, consider handing off to the Triage Agent.
     """,
     tools=[create_quickbooks_journal_entry_tool],
     # input_guardrails=[...],
