@@ -7,12 +7,11 @@ import time
 import logging
 
 from main import (
-    triage_agent,
-    faq_agent,
-    seat_booking_agent,
-    flight_status_agent,
-    cancellation_agent,
-    create_initial_context,
+    triage_agent, # This is the new Triage Agent
+    pdf_processing_agent,
+    quickbooks_journal_agent,
+    quickbooks_query_agent,
+    create_initial_context, # This now creates QuickbooksAgentContext
 )
 
 from agents import (
@@ -109,12 +108,11 @@ def _get_agent_by_name(name: str):
     """Return the agent object by name."""
     agents = {
         triage_agent.name: triage_agent,
-        faq_agent.name: faq_agent,
-        seat_booking_agent.name: seat_booking_agent,
-        flight_status_agent.name: flight_status_agent,
-        cancellation_agent.name: cancellation_agent,
+        pdf_processing_agent.name: pdf_processing_agent,
+        quickbooks_journal_agent.name: quickbooks_journal_agent,
+        quickbooks_query_agent.name: quickbooks_query_agent,
     }
-    return agents.get(name, triage_agent)
+    return agents.get(name, triage_agent) # Default to the new Triage Agent
 
 def _get_guardrail_name(g) -> str:
     """Extract a friendly guardrail name."""
@@ -141,10 +139,9 @@ def _build_agents_list() -> List[Dict[str, Any]]:
         }
     return [
         make_agent_dict(triage_agent),
-        make_agent_dict(faq_agent),
-        make_agent_dict(seat_booking_agent),
-        make_agent_dict(flight_status_agent),
-        make_agent_dict(cancellation_agent),
+        make_agent_dict(pdf_processing_agent),
+        make_agent_dict(quickbooks_journal_agent),
+        make_agent_dict(quickbooks_query_agent),
     ]
 
 # =========================
@@ -205,7 +202,9 @@ async def chat_endpoint(req: ChatRequest):
                 passed=(g != failed),
                 timestamp=gr_timestamp,
             ))
-        refusal = "Sorry, I can only answer questions related to airline travel."
+        # Updated refusal message as old guardrails are removed.
+        # This part of the code might be less likely to be hit now unless new input guardrails are added to agents.
+        refusal = "Sorry, I am unable to process that request at the moment."
         state["input_items"].append({"role": "assistant", "content": refusal})
         return ChatResponse(
             conversation_id=conversation_id,
@@ -283,14 +282,6 @@ async def chat_endpoint(req: ChatRequest):
                     metadata={"tool_args": tool_args},
                 )
             )
-            # If the tool is display_seat_map, send a special message so the UI can render the seat selector.
-            if tool_name == "display_seat_map":
-                messages.append(
-                    MessageResponse(
-                        content="DISPLAY_SEAT_MAP",
-                        agent=item.agent.name,
-                    )
-                )
         elif isinstance(item, ToolCallOutputItem):
             events.append(
                 AgentEvent(
