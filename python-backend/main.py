@@ -20,12 +20,25 @@ from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
 # CONTEXT
 # =========================
 
+class ReceiptItem(BaseModel):
+    """Represents an item listed on a receipt."""
+    description: str | None = None
+    amount: float | None = None
+    quantity: int | None = None # Optional, as not all receipts have quantity per item
+
+class InvoiceLineItem(BaseModel):
+    """Represents a line item on an invoice."""
+    description: str | None = None
+    quantity: float | None = None # Using float for quantity to be flexible (e.g., hours)
+    unit_price: float | None = None
+    total: float | None = None
+
 class ReceiptData(BaseModel):
     """Structured data extracted from a receipt PDF."""
     merchant_name: str | None = None
     transaction_date: str | None = None # Using str for simplicity, could be date/datetime
     total_amount: float | None = None
-    items: list[dict] | None = None # e.g., [{"description": "item1", "amount": 10.00}]
+    items: list[ReceiptItem] | None = None # Was list[dict]
     currency: str | None = "USD"
 
 class InvoiceData(BaseModel):
@@ -35,7 +48,7 @@ class InvoiceData(BaseModel):
     invoice_date: str | None = None # Using str for simplicity
     due_date: str | None = None # Using str for simplicity
     total_amount: float | None = None
-    line_items: list[dict] | None = None # e.g., [{"description": "service A", "quantity": 1, "unit_price": 50.00, "total": 50.00}]
+    line_items: list[InvoiceLineItem] | None = None # Was list[dict]
     currency: str | None = "USD"
 
 class QuickbooksAgentContext(BaseModel):
@@ -77,7 +90,10 @@ async def parse_pdf_tool(
             merchant_name="Mock Merchant",
             transaction_date="2024-01-15",
             total_amount=125.50,
-            items=[{"description": "Item A", "amount": 75.00}, {"description": "Item B", "amount": 50.50}]
+            items=[
+                ReceiptItem(description="Item A", amount=75.00, quantity=1),
+                ReceiptItem(description="Item B", amount=50.50, quantity=2)
+            ]
         )
         context.context.extracted_data = mock_data
         return mock_data
@@ -88,7 +104,9 @@ async def parse_pdf_tool(
             invoice_date="2024-01-10",
             due_date="2024-02-10",
             total_amount=1500.00,
-            line_items=[{"description": "Consulting Services", "quantity": 10, "unit_price": 150.00, "total": 1500.00}]
+            line_items=[
+                InvoiceLineItem(description="Consulting Services", quantity=10, unit_price=150.00, total=1500.00)
+            ]
         )
         context.context.extracted_data = mock_data
         return mock_data
